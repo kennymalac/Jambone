@@ -1,3 +1,7 @@
+* block! is required block that must be extended
+by child template
+alternatively, {{ throw() }} inside {{ block }}
+
 
 * Add whitespace token
 * include subtemplates into main template

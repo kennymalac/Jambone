@@ -84,8 +84,10 @@ iterator tokenizer*(cursor: StringStream): TokenOccurrence =
     yield (pos: pos, token: token.get())
     # curpos = pos
 
+let defaultConfig = %*{}
+
 # Output to string
-proc render*(source: string, context: Table[string, Showable]): string =
+proc render*(source: string, context: Table[string, Showable], config: JsonNode = defaultConfig): string =
   var tokens = newSeq[TokenOccurrence]()
 
   var cursor = newStringStream(source)
