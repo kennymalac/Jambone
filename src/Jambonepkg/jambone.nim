@@ -54,24 +54,34 @@ proc isToken(str: string): bool =
     if $t == str:
       return true
 
+proc anyTokenContains(str: string): bool =
+  result = false
+
+  for t in Token:
+    if ($t).contains(str):
+      return true
+
+  # return list of candidates?
+
 proc findToken(region: StringStream): tuple[pos: int, token: Option[Token]] =
   result = (0, none(Token))
 
   var tokenStr = ""
-  var tokenPos = 0
 
+  var tokenPos = region.getPosition()
   var c = region.readChar()
+
   while c != '\0':
-    if Whitespace.contains(c):
+    tokenStr.add(c)
+    if not anyTokenContains(tokenStr):
       tokenStr = ""
       tokenPos = region.getPosition()
       c = region.readChar()
       continue
 
-    tokenStr.add(c)
-
     # TODO optimize - only check against list of valid candidate tokens
     #     let candidates: seq = StartExpression[tokenPos],
+
     if isToken(tokenStr):
       return (pos: tokenPos, token: some(parseEnum[Token](tokenStr)))
 
@@ -83,6 +93,9 @@ iterator tokenizer*(cursor: StringStream): TokenOccurrence =
   while isSome((var (pos, token) = findToken(cursor); token)):
     yield (pos: pos, token: token.get())
     # curpos = pos
+
+
+
 
 let defaultConfig = %*{}
 
