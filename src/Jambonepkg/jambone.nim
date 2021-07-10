@@ -26,23 +26,37 @@ type
     ElseBlock = "else",
     EndIfBlock = "endif"
 
+  TokenOccurrence* = tuple[pos: int, token: Token]
+
 # let maxTokenLength =
 
-  # TokenObject = object
-  #   pos: int
+  JamboneASTKind = enum
+    jamRoot, # Base/root node of AST
+    # Example:
+    # {{if this}} sietnarietn {{ $variable }} {{endif}}
+    # jamRoot -> [jamText, jamVariable, jamText]
+    jamBlock,
+    jamIf,
+    jamShow,
+    jamVariable,
+    jamText
 
-  #   case kind: Token
-  #   of StartExpression:
-  #   of EndExpression:
-  #   of Show:
-  #   of StartBlock:
-  #   of EndBlock:
-  #     of IfBlock:
-  #   of ElseBlock:
-  #   of EndIfBlock:
-
-type
-  TokenOccurrence* = tuple[pos: int, token: Token]
+  JamboneASTNode = ref object
+    case kind: JamboneASTKind
+    of jamRoot: children: seq[JamboneASTNode]
+    of jamBlock:
+      blockName: string
+      contents: JamboneASTNode
+    of jamIf:
+      condition, ifContents, elseContents: JamboneASTNode
+      # elseifBranches seq[JamboneASTNode]
+    of jamShow:
+      variable: JamboneASTNode
+    of jamVariable:
+      varName: string
+      varValue: Showable
+    of jamText:
+      text: string
 
 # TODO render partials
 # proc renderPartial*
@@ -95,7 +109,18 @@ iterator tokenizer*(cursor: StringStream): TokenOccurrence =
     # curpos = pos
 
 
+proc parse*(source: string, tokens: seq[TokenOccurrence], context: Table[string, Showable]): JamboneASTNode =
+  result = JamboneASTNode(kind: jamRoot, children: @[])
 
+
+proc eval*(ast: JamboneASTNode): string =
+  result = ""
+  assert ast.kind == JamboneASTKind.jamRoot
+
+  let output = ""
+  # TODO eval AST
+
+  result = output
 
 let defaultConfig = %*{}
 
