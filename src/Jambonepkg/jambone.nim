@@ -63,7 +63,7 @@ type
     case kind*: JamboneASTKind
     of jamRoot: children*: seq[JamboneASTNode]
     of jamBlock:
-      blockName: string
+      blockName*: string
       contents*: JamboneASTNode
     of jamEnd: discard
     of jamIf:
@@ -213,7 +213,7 @@ type ParserError = object
   # case kind: ParserErrorKind
   message: string
   lineNumber: int
-  token: TokenOccurrence
+  token: Option[TokenOccurrence]
 
 proc `$`*(x: ParserError): string =
   return &"Error: {x.message}\nLine number: {x.lineNumber}\n"
@@ -244,11 +244,11 @@ proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
     elif len(context.activeExpression) == 1:
       # Must be a functional call.
       # TODO functions
-      context.error.add(ParserError(message: "Lone identifier, functions not implemented", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Lone identifier, functions not implemented", lineNumber: context.lineNumber, token: some(token)))
       return
 
     if currentNode == nil:
-      context.error.add(ParserError(message: "Identifier is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Identifier is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: some(token)))
 
     let identifier = token.token.identifier
 
@@ -262,7 +262,7 @@ proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
 
     else:
       # TODO figure out if it's a variable or if it's text
-      context.error.add(ParserError(message: "Variable is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Variable is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: some(token)))
 
     echo ")"
     # return
@@ -272,7 +272,7 @@ proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
   case token.token.keyword:
   of StartExpression:
     if len(context.activeExpression) > 0:
-      context.error.add(ParserError(message: "Curly brackets not closed properly!", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Curly brackets not closed properly!", lineNumber: context.lineNumber, token: some(token)))
       return
 
     let lineNumber = context.lineNumber
@@ -289,7 +289,7 @@ proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
     # Starting a node, pop the next token
   of EndExpression:
     if len(context.activeExpression) < 1:
-      context.error.add(ParserError(message: "Empty expression or missing starting bracket", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Empty expression or missing starting bracket", lineNumber: context.lineNumber, token: some(token)))
       return
 
     context.activeExpression.setLen(0)
@@ -304,7 +304,7 @@ proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
   of StartBlock:
     # backtracking
     if len(context.activeExpression) != 1:
-      context.error.add(ParserError(message: "Invalid syntax: Block", lineNumber: context.lineNumber, token: token))
+      context.error.add(ParserError(message: "Invalid syntax: Block", lineNumber: context.lineNumber, token: some(token)))
       return
 
     context.activeExpression.add(token)
@@ -340,15 +340,20 @@ proc parse*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], con
     let next = match(node, tokens, context)
     if next != nil:
       node = next
-      currentNode.children.add(node)
-
       if node.kind == JamboneASTKind.jamEnd:
         # Go back to parent
-        return currentNode
+        return node
+
+      currentNode.children.add(node)
 
       if node.kind == JamboneASTKind.jamBlock:
         # Parse the children
-        discard parse(node.contents, tokens, context, depth+1)
+        let endNode = parse(node.contents, tokens, context, depth+1)
+        if endNode.kind != JamboneASTKind.jamEnd:
+          context.error.add(ParserError(message: "Block not ended!", lineNumber: context.lineNumber, token: none(TokenOccurrence)))
+
+        currentNode.children.add(endNode)
+
 
   return currentNode
 

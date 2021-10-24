@@ -2,6 +2,7 @@ import unittest
 import deques
 import streams
 import tables
+import print
 
 import Jambonepkg/jambone
 
@@ -9,25 +10,17 @@ import Jambonepkg/jambone
 
 
 suite "block parsing - phase 2":
-  test "startblock":
-    let source = "{{ block example }}"
-    var tokens = tokenize(source)
-
-    let root = newParseTree(source, tokens, { "test": "ok" }.toTable())
-    echo "root kind:"
-    echo root.kind
-
-    check len(root.children) == 1
-    echo $root.children[0]
-
-  test "endblock":
+  test "block":
     let source = "{{ block example }} ... {{ endblock }}"
     var tokens = tokenize(source)
 
     let root = newParseTree(source, tokens, { "test": "ok" }.toTable())
 
-    check len(root.children) == 1
-    echo $root.children[0]
+    check len(root.children) == 2
+    check root.children[0].kind == JamboneAstKind.jamBlock
+    check root.children[1].kind == JamboneAstKind.jamEnd
+    check root.children[0].blockName == "example"
+    print root
 
   test "nested blocks":
     let source = "{{ block example }} {{ block test }} {{ endblock }} {{ endblock }}"
@@ -35,14 +28,18 @@ suite "block parsing - phase 2":
 
     let root = newParseTree(source, tokens, { "test": "ok" }.toTable())
 
-    check len(root.children) == 1
-    echo $root.children[0]
+    check len(root.children) == 2
+
+    check root.children[0].kind == JamboneAstKind.jamBlock
+    check root.children[1].kind == JamboneAstKind.jamEnd
+    check root.children[0].blockName == "example"
 
     check len(root.children[0].contents.children) == 2
-    check root.children[0].kind == JamboneAstKind.jamBlock
-    echo $root.children[0].contents.children[0]
+    check root.children[0].contents.children[0].kind == JamboneAstKind.jamBlock
     check root.children[0].contents.children[1].kind == JamboneAstKind.jamEnd
-    echo $root.children[0].contents.children[1]
+    check root.children[0].contents.children[0].blockName == "test"
+
+    print root
 
 
 suite "if/else":
