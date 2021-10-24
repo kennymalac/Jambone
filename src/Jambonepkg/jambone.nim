@@ -45,23 +45,27 @@ type
 
 # let maxTokenLength =
 
-  JamboneASTKind = enum
+  JamboneASTKind* = enum
     jamRoot, # Base/root node of AST
     # Example:
     # {{if this}} sietnarietn {{ $variable }} {{endif}}
     # jamRoot -> [jamText, jamVariable, jamText]
     jamBlock,
+    # NOTE Implementation detail: End terminates if, block, etc.
+    jamEnd,
     jamIf,
     jamShow,
     jamVariable,
     jamText
 
   JamboneASTNode = ref object
-    case kind: JamboneASTKind
+    # TODO add parent
+    case kind*: JamboneASTKind
     of jamRoot: children*: seq[JamboneASTNode]
     of jamBlock:
       blockName: string
-      contents: JamboneASTNode
+      contents*: JamboneASTNode
+    of jamEnd: discard
     of jamIf:
       condition, ifContents, elseContents: JamboneASTNode
       # elseifBranches seq[JamboneASTNode]
@@ -75,6 +79,25 @@ type
 
 # TODO render partials
 # proc renderPartial*
+
+proc `$`*(x: JamboneASTNode): string =
+  case x.kind:
+    of jamRoot:
+      return &"{x.kind} {len(x.children)} children"
+    of jamBlock:
+      return &"{x.kind} blockName: {x.blockName}"
+    of jamEnd:
+       return "END"
+    of jamIf:
+      return &"{x.kind} condition: {x.condition} ifContents: {x.ifContents} {x.elseContents}"
+      # elseifBranches seq[JamboneASTNode]
+    of jamShow:
+      return &"{x.kind} show: {x.variable}"
+    of jamVariable:
+      return &"{x.kind} varName: {x.varName}\nvarValue: {x.varValue}"
+    of jamText:
+      return &"{x.kind} text: {x.text}"
+
 
 proc newKeyword*(tokenStr: string): Token =
   return Token(kind: TokenKind.jamKeyword, keyword: parseEnum[KeywordTokenKind](tokenStr))
@@ -192,12 +215,11 @@ type ParserError = object
   lineNumber: int
   token: TokenOccurrence
 
-proc `$`(x: ParserError): string =
+proc `$`*(x: ParserError): string =
   return &"Error: {x.message}\nLine number: {x.lineNumber}\n"
 
 type ParserContextObj = object
     #stack: seq[JamboneASTNode]
-    # root: JamboneASTNode
     lineNumber: int
     #node: Option[JamboneASTNode]
     activeExpression: seq[TokenOccurrence]
@@ -206,24 +228,47 @@ type ParserContextObj = object
 type ParserContext = ref ParserContextObj
 # parse("...", [start token, block token, end token], )
 
-proc parse*(currentNode: JamboneASTNode, source: StringStream, tokens: var Deque[TokenOccurrence], context: var ParserContext): JamboneASTNode =
+proc match*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], context: var ParserContext): JamboneASTNode =
   if len(tokens) == 0:
     return currentNode
 
-  echo currentNode.kind
-
-  # result = JamboneASTNode(kind: jamRoot, children: @[])
-  # let stack: seq[JamboneASTNode] = @[]
-  # let activeTokens: seq[TokenOccurrence] = @[]
   let token = tokens.popFirst()
+  #source.setPosition(token.pos)
+  echo token
 
-  # set position to current token
-  source.setPosition(token.pos)
+  if token.token.kind == TokenKind.jamIdentifier:
+    if len(context.activeExpression) == 0:
+      #context.warning.add(ParserWarning
+      echo "Parser warning: Lone identifier token outside of expression, tokenizer pfucked up, something could go wrong.\n"
 
-  if token.token.kind != TokenKind.jamKeyword:
-    # TODO
-    return
+    elif len(context.activeExpression) == 1:
+      # Must be a functional call.
+      # TODO functions
+      context.error.add(ParserError(message: "Lone identifier, functions not implemented", lineNumber: context.lineNumber, token: token))
+      return
 
+    if currentNode == nil:
+      context.error.add(ParserError(message: "Identifier is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: token))
+
+    let identifier = token.token.identifier
+
+    if currentNode.kind == JamboneASTKind.jamBlock:
+      currentNode.blockName = identifier
+    #elif currentNode.kind == JamboneASTKind.jamIf:
+    #  currentNode.condition = identifier
+    elif currentNode.kind == JamboneASTKind.jamShow:
+      # TODO grab variable from context
+      currentNode.variable = JamboneASTNode(kind: JamboneASTKind.jamVariable, varName: identifier, varValue: nil)
+
+    else:
+      # TODO figure out if it's a variable or if it's text
+      context.error.add(ParserError(message: "Variable is inside an empty expression. To echo a variable, please use $.", lineNumber: context.lineNumber, token: token))
+
+    echo ")"
+    # return
+    return match(currentNode, tokens, context)
+
+  # Keyword
   case token.token.keyword:
   of StartExpression:
     if len(context.activeExpression) > 0:
@@ -232,20 +277,26 @@ proc parse*(currentNode: JamboneASTNode, source: StringStream, tokens: var Deque
 
     let lineNumber = context.lineNumber
     context.activeExpression.add(token)
+
+    return match(nil, tokens, context)
+
     # result = parse(source, tokens, context)
     # if result.isNil:
     #   context.error.add(ParserError(message: "Invalid expression:", lineNumber: lineNumber, token: token))
     #   return
+    #return parse(result, source, tokens, context)
 
     # Starting a node, pop the next token
   of EndExpression:
-    if len(context.activeExpression) < 2:
+    if len(context.activeExpression) < 1:
       context.error.add(ParserError(message: "Empty expression or missing starting bracket", lineNumber: context.lineNumber, token: token))
       return
 
     context.activeExpression.setLen(0)
+
     # result = nil
-    #node = JamboneASTNode(kind: )
+    echo ")"
+    return currentNode
 
   of Show:
     discard
@@ -257,10 +308,16 @@ proc parse*(currentNode: JamboneASTNode, source: StringStream, tokens: var Deque
       return
 
     context.activeExpression.add(token)
-    result = JamboneASTNode(kind: JamboneASTKind.jamBlock, blockName: "")
+
+    let node = JamboneASTNode(kind: JamboneASTKind.jamBlock, blockName: "", contents: JamboneASTNode(kind: JamboneASTKind.jamRoot, children: @[]))
+    #return match(match(node, tokens, context), tokens, context)
+    return match(node, tokens, context)
 
   of EndBlock:
-    discard
+    let node = JamboneASTNode(kind: JamboneASTKind.jamEnd)
+    return match(node, tokens, context)
+    # set back to parent
+    # let startblock =
 
   of IfBlock:
     discard
@@ -271,24 +328,46 @@ proc parse*(currentNode: JamboneASTNode, source: StringStream, tokens: var Deque
   of EndIfBlock:
     discard
 
+proc parse*(currentNode: JamboneASTNode, tokens: var Deque[TokenOccurrence], context: var ParserContext, depth = 0): JamboneASTNode =
+  if len(tokens) == 0:
+    return currentNode
 
-  return parse(parse(result, source, tokens, context), source, tokens, context)
+  if currentNode != nil:
+    echo currentNode.kind
+
+  var node = currentNode
+  while len(tokens) > 0:
+    let next = match(node, tokens, context)
+    if next != nil:
+      node = next
+      currentNode.children.add(node)
+
+      if node.kind == JamboneASTKind.jamEnd:
+        # Go back to parent
+        return currentNode
+
+      if node.kind == JamboneASTKind.jamBlock:
+        # Parse the children
+        discard parse(node.contents, tokens, context, depth+1)
+
+  return currentNode
 
 proc newParseTree*(source: string, tokens: var Deque[TokenOccurrence], view: Table[string, Showable]): JamboneAstNode =
+  let root = JamboneASTNode(kind: JamboneASTKind.jamRoot, children: @[])
   var context = ParserContext(
     lineNumber: 0,
     # view: view,
     activeExpression: @[],
     error: @[]
   )
-  # context.activeExpression = newSeq[var TokenOccurrence]()
 
   # Create the root node
-  let root = JamboneASTNode(kind: JamboneASTKind.jamRoot, children: @[])
   let stream = newStringStream(source)
-  result = parse(root, stream, tokens, context)
+
+  result = parse(root, tokens, context)
 
   if len(context.error) > 0:
+    echo "There were some errors"
     echo context.error
 
 proc eval*(ast: JamboneASTNode): string =
