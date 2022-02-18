@@ -59,21 +59,18 @@ suite "nested blocks":
   test "two levels":
     skip()
 
-suite "layout tests":
-  setup:
-    let parent = "<html><head><title>{{ block title }}Default text{{ endblock }}</title></head></html>"
-    let config = %* {
-      "templates": {
-        "parent": parent # TODO test filename
-      }
-    }
-  test "extending a template":
-    let child = "{{ extend \"parent\" }}"
-    check render(child, { "test": "ok" }.toTable(), config) == "<html><head><title>Default text</title></head></html>"
 
-  test "overriding a block":
-    let child = "{{ extend \"parent\" }} {{ block title }}New title{{ endblock }}"
-    check render(child, { "test": "ok" }.toTable(), config) == "<html><head><title>New title</title></head></html>"
+suite "layout block tests":
+  test "import from file":
+    let example = "<html> {{ block test }} t {{ endblock }} 1</html>"
+    check render(example, %*{ "blocks": [{ "name": "test", "provider": "tests/example-block.html" }] }) == "<html> unicorn\n 1</html>"
+
+  test "derive in child":
+    let parentExample = "<html>{{ block test }} t {{ endblock }}</html>"
+    let parentConfig = %*{ "blocks": [{ "name": "test", "provider": nil }]}
+    let childExample = "{{ block test }}123{{ endblock }}"
+    check render(parentExample, parentConfig) == "<html> t </html>"
+    check renderTemplate(childExample, parentExample, parentConfig) == "<html>123</html>"
 
   test "nesting parent block":
     skip()

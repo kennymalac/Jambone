@@ -11,4 +11,4 @@ bin           = @["Jambone"]
 
 # Dependencies
 
-requires "nim >= 1.4.4"
+requires "nim >= 1.4.4, print >= 1.0.1"

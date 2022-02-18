@@ -11,6 +11,8 @@ suite "block parsing - phase 1":
     for tokenOccurrence in tokenizer(cursor):
       tokens.add(tokenOccurrence)
 
+    echo tokens
+
     var (startPos, startToken) = tokens[0]
     check startPos == 0
     check startToken.kind == TokenKind.jamKeyword

@@ -41,6 +41,14 @@ suite "block parsing - phase 2":
 
     print root
 
+  test "no html":
+    let source = "{{block example}}{{endblock}}"
+    var tokens = tokenize(source)
+
+    let root = newParseTree(source, tokens, { "test": "ok" }.toTable())
+    check root.children[0].kind == JamboneAstKind.jamBlock
+    check root.children[1].kind == JamboneAstKind.jamEnd
+    check root.children[0].blockName == "example"
 
 suite "if/else":
   test "if/elseif/else/endif":

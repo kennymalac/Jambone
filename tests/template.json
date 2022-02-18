@@ -1,0 +1,7 @@
+{
+  "fileName": "tests/layout.jam.html",
+  "blocks": [{
+    "name": "bar",
+    "provider": "tests/test.jam.html"
+  }]
+}
